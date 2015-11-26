@@ -213,6 +213,26 @@ Fixpoint subterms (t : Term) : list Term :=
   | App t' t'' => cons t (app (subterms t') (subterms t''))
   end.
 
+Example i_subterms : 
+  subterms Combinator.I = Combinator.I :: (BVar 0) :: nil.
+Proof. reflexivity. Qed.
+
+Example k_subterms : 
+  subterms Combinator.K = Combinator.K :: Lam (BVar 1) :: BVar 1 :: nil.
+Proof. reflexivity. Qed.
+
+Example s_subterms : 
+  subterms Combinator.S = 
+  Combinator.S
+  :: Lam (Lam (App (App (BVar 2) (BVar 0)) (App (BVar 1) (BVar 0))))
+     :: Lam (App (App (BVar 2) (BVar 0)) (App (BVar 1) (BVar 0)))
+        :: App (App (BVar 2) (BVar 0)) (App (BVar 1) (BVar 0))
+           :: App (BVar 2) (BVar 0)
+              :: BVar 2
+                 :: BVar 0
+                    :: App (BVar 1) (BVar 0) :: BVar 1 :: BVar 0 :: nil.
+Proof. reflexivity. Qed.
+
 (* Barendregt 2.1.9. Modified slightly to handle the [n=0] case. *)
 Fixpoint iterate (n : nat) (t : Term) : Term :=
   match n with
@@ -228,3 +248,15 @@ Fixpoint length (t : Term) : nat :=
   | Lam t' => 1 + (length t')
   | App t' t'' => (length t') + (length t'')
   end.
+
+Example i_length :
+  length Combinator.I = 2.
+Proof. reflexivity. Qed.
+
+Example k_length :
+  length Combinator.K = 3.
+Proof. reflexivity. Qed.
+
+Example s_length :
+  length Combinator.S = 7.
+Proof. reflexivity. Qed.
