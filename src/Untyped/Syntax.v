@@ -171,6 +171,7 @@ Example s_dename_ex1 :
   dename (lambda ["x", "y", "z"] `"x" @ `"z" @ (`"y" @ `"z")) = Combinator.S.
 Proof. simpl. reflexivity. Qed.
 
+Section ClosedTerms.
 
 (** A term is "closed" if it has no free variables. (Barendregt, 2.1.7.ii.) *)
 Fixpoint is_closed (t : Term) : Prop :=
@@ -204,6 +205,10 @@ Example k_is_closed :
   is_closed Combinator.K.
 Proof. reflexivity. Qed.
 
+End ClosedTerms.
+
+Section Subterms.
+
 (* The collection of subterms of a given term. (Barendregt, 2.1.8.) *)
 Fixpoint subterms (t : Term) : list Term :=
   match t with
@@ -233,6 +238,8 @@ Example s_subterms :
                     :: App (BVar 1) (BVar 0) :: BVar 1 :: BVar 0 :: nil.
 Proof. reflexivity. Qed.
 
+End Subterms.
+
 (* Barendregt 2.1.9. Modified slightly to handle the [n=0] case. *)
 Fixpoint iterate (n : nat) (t : Term) : Term :=
   match n with
@@ -240,6 +247,8 @@ Fixpoint iterate (n : nat) (t : Term) : Term :=
   | S 0 => t
   | S n' => App t (iterate n' t)
   end.
+
+Section TermLength.
 
 Fixpoint length (t : Term) : nat :=
   match t with
@@ -260,3 +269,5 @@ Proof. reflexivity. Qed.
 Example s_length :
   length Combinator.S = 7.
 Proof. reflexivity. Qed.
+
+End TermLength.
