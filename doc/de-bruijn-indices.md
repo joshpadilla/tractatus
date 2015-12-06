@@ -35,7 +35,7 @@ decent introduction to the subject.
 The main disadvantage that I see: the term `λ x y.y z` in De Bruijn
 indices becomes `λλ(13)`. And `λ x y.y w` likewise evaluates to `λλ(13)`.
 But `λ x y.y z` is not alpha congruent to `λ x y.y w`. That's the
-problem I have with the naive De Bruijn index convention. The solution
+problem with the naive De Bruijn index convention. The solution
 is either (a) have some complicated scoping rules, or (b) have free
 variables on different footing than bound variables (e.g., keep free
 variables as strings but bound variables as natural numbers).
