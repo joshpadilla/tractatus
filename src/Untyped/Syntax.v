@@ -4,14 +4,19 @@ Add LoadPath "~/src/tractatus/src/Untyped/".
 
 ...modify it to where the folder is, accordingly. *)
 
+Module Export src.
+Module Export Untyped.
+Module Export Syntax.
 Require Import String.
 Require Import List.
 Require Export Arith.
 Require Import Coq.Arith.EqNat.
 Require Import Coq.Arith.Compare_dec.
 
-(* Helper lemmas, which should be refactored into a different module. *)
-(* Principle of explosion: from a contradiction, we can prove anything. *)
+(** Helper lemmas, which should be refactored into a different module.
+
+Principle of explosion: from a contradiction, we can prove anything. 
+*)
 Theorem ex_falso_quodlibet : forall (P:Prop),
   False -> P.
 Proof.
@@ -25,6 +30,12 @@ Lemma list_membership :
 Proof. intuition. Qed.
 (* End of Helper Lemmas *)
 
+(** * Identifiers and Variables
+
+We treat variables and identifiers on unequal footing, depending on if they are
+free or bound.
+*)
+
 Module Export Identifier.
 
 Inductive Id : Type :=
@@ -32,6 +43,11 @@ Inductive Id : Type :=
   | BId : nat -> Id.   (* bounded variable *)
 Hint Constructors Id.
 
+(**
+We need decidable equality on identifiers, to prove whether two [Id]s are
+equal or not. These propositions establish the basic properties needed later
+on.
+*)
 Theorem eq_id_dec : forall id1 id2 : Id, {id1 = id2} + {id1 <> id2}.
 Proof.
   decide equality.
@@ -62,7 +78,23 @@ Proof.
 Qed.
 End Identifier.
 
-(**
+(** * Terms
+
+Lambda calculus is defined, inductively, by constructing terms. A term may be:
+
+- a variable, _x_
+
+- a lambda abstraction ("function") λ _x_ . _M_ for some term _M_
+
+- an application _M N_ for arbitrary terms _M_ and _N_.
+
+Observe there are no quantifiers in the theory, since lambda calculus is an
+equational theory. It is not a logical calculus. (But it can encode one!) So
+any quantifiers used are purely in the metalanguage.
+
+How do we represent a term in our metalanguage?
+
+** De Bruijn Indices
   We use a modified de Bruijn indices, which for free variables
   are a string, and for bound variables...it's the usual de Bruijn
   index.
@@ -81,23 +113,10 @@ Inductive Term : Type :=
 Hint Constructors Term.
 End DeBruijn.
 
-(** The free variables in a term is just a list of all the free variables
-    appearing in it. This is just Barendregt, definition 2.1.7.i.
+(** **** Exercise
+
+Show if [FVar s = FVar s0], then [s = s0].
 *)
-Fixpoint FV (t : Term) : list Term :=
-  match t with
-  | FVar s => (FVar s)::nil
-  | BVar _ => nil
-  | Lam t' => FV t'
-  | App t' t'' => app (FV t') (FV t'')
-  end.
-
-Fixpoint Id_in_FV (x:Id) (t:Term) : Prop :=
-  match x with
-  | FId s => In (FVar s) (FV t)
-  | _ => False
-  end.
-
 Lemma FVar_eq :
   forall (s s0:string),
   (FVar s0) = (FVar s) <-> s=s0.
@@ -109,6 +128,37 @@ Proof.
     rewrite H; reflexivity.
 Qed.
 
+(** The free variables in a term is just a list of all the free variables
+    appearing in it. This is just Barendregt, definition 2.1.7.i.
+*)
+Fixpoint FV (t : Term) : list Term :=
+  match t with
+  | FVar s => (FVar s)::nil
+  | BVar _ => nil
+  | Lam t' => FV t'
+  | App t' t'' => app (FV t') (FV t'')
+  end.
+
+(** Applying one term to another preserves the free variables in
+    the representation we have chosen. Why? Because we explicitly treat
+    free variables _differently_ than bound ones. Application could
+    consume bound variables, but not free variables.
+*)
+
+Proposition app_FV_functorial :
+  forall (M1 M2:Term),
+  FV (App M1 M2) = (FV M1) ++ (FV M2).
+Proof. intuition. Qed.
+
+(** We have a property determining if an [Id] is a free variable in a term or not. 
+    (Should this be an [Inductive] type instead? I'm uncertain)
+*)
+Definition Id_in_FV (x:Id) (t:Term) : Prop :=
+  match x with
+  | FId s => In (FVar s) (FV t)
+  | _ => False
+  end.
+
 Lemma trivial_FV_in_FV :
   forall (s s0:string),
   Id_in_FV (FId s0) (FVar s) <-> s=s0.
@@ -117,7 +167,7 @@ Proof.
   (* -> *)
   inversion H. inversion H0; reflexivity. inversion H0.
   (* <- *)
-  rewrite H; unfold Id_in_FV; unfold FV; compute; auto.
+  rewrite H. unfold Id_in_FV; unfold FV; compute; auto.
 Qed.
 
 Lemma trivial_FV_notin_FV :
@@ -134,11 +184,6 @@ Qed.
 Corollary trivial_FV_notin_BV :
   forall (s:string) (n:nat),
   ~(Id_in_FV (FId s) (BVar n)).
-Proof. intuition. Qed.
-
-Proposition app_FV_functorial :
-  forall (M1 M2:Term),
-  FV (App M1 M2) = (FV M1) ++ (FV M2).
 Proof. intuition. Qed.
 
 Proposition app_FV_denied_l :
@@ -333,12 +378,12 @@ Qed.
  The collection of subterms of a given term. (Barendregt, 2.1.8.)
 *)
 Fixpoint subterms (t : Term) : list Term :=
-  match t with
-  | FVar s => (FVar s)::nil
-  | BVar b => (BVar b)::nil
-  | Lam t' => t::(subterms t')
-  | App t' t'' => cons t (app (subterms t') (subterms t''))
-  end.
+  t::(match t with
+      | FVar _ => nil
+      | BVar _ => nil
+      | Lam t' => (subterms t')
+      | App t' t'' => (subterms t') ++ (subterms t'')
+      end).
 
 Example i_subterms : 
   subterms Combinator.I = Combinator.I :: (BVar 0) :: nil.
@@ -351,13 +396,17 @@ Proof. reflexivity. Qed.
 Example s_subterms : 
   subterms Combinator.S = 
   Combinator.S
-  :: Lam (Lam (App (App (BVar 2) (BVar 0)) (App (BVar 1) (BVar 0))))
-     :: Lam (App (App (BVar 2) (BVar 0)) (App (BVar 1) (BVar 0)))
-        :: App (App (BVar 2) (BVar 0)) (App (BVar 1) (BVar 0))
-           :: App (BVar 2) (BVar 0)
-              :: BVar 2
-                 :: BVar 0
-                    :: App (BVar 1) (BVar 0) :: BVar 1 :: BVar 0 :: nil.
+  :: Lam (Lam (App (App (BVar 2) (BVar 0)) 
+                   (App (BVar 1) (BVar 0))))
+       :: Lam (App (App (BVar 2) (BVar 0)) 
+                   (App (BVar 1) (BVar 0)))
+            :: App (App (BVar 2) (BVar 0)) 
+                   (App (BVar 1) (BVar 0))
+                 :: App (BVar 2) (BVar 0)
+                      :: BVar 2 :: BVar 0
+                 :: App (BVar 1) (BVar 0) 
+                      :: BVar 1 :: BVar 0 
+                 :: nil.
 Proof. reflexivity. Qed.
 
 (** Barendregt 2.1.9. Modified slightly to handle the [n=0] case. *)
@@ -369,7 +418,14 @@ Fixpoint iterate (n : nat) (t : Term) : Term :=
   end.
 
 (** The length of a term is the (number of free variables) + (number of lambdas) 
-    + (number of de Bruijn indices). *)
+    + (number of de Bruijn indices).
+
+    Don't be fooled by the similarity between [length] and [subterms].
+    It turns out the length of the list of [subterms] is not equal to the
+    [length] of a term. For a counter-example, consider a term like
+    [App t1 t2]. Its subterms would produce [(App t1 t2)::((Subterms t1)++(Subterms t2))].
+    But its length would be [(length t1) + (length t2)].
+*)
 Fixpoint length (t : Term) : nat :=
   match t with
   | FVar _ => 1
@@ -389,3 +445,8 @@ Proof. reflexivity. Qed.
 Example s_length :
   length Combinator.S = 7.
 Proof. reflexivity. Qed.
+
+
+End Syntax.
+End Untyped.
+End src.

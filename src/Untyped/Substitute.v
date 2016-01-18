@@ -1,12 +1,23 @@
-(* Add LoadPath "~/src/tractatus/src/Untyped/". *)
+Add LoadPath "./src/Untyped/".
 
+(** printing ==> #<span style="font-family: arial;">&rArr;</span># *)
+(** printing ==>* #<span style="font-family: arial;">&rArr;*</span># *)
+
+(**
+Lambda calculus really shines at substitution. Arguably, its entire
+_raison d'etre_ is to study how to substitute terms into expressions.
+But there's a lot of subtlety here, we don't want to fall into traps.
+*)
+
+Module Export src.
+Module Export Untyped.
+Module Export Substitute.
 Require Import String.
 Require Import Coq.Arith.EqNat.
 Require Import Coq.Relations.Relation_Operators.
 
 Require Import Syntax.
 
-Module Export Substitute.
 (** * Capture-free substitution.
 
 Definition (Barendregt 2.1.15). The result of substituting
@@ -43,6 +54,8 @@ Proof.
   unfold subst. apply eq_id.
 Qed.
 
+(** Substitution must match the variable being replaced. Otherwise,
+    it acts like the identity. *)
 Lemma subst_free_var_denied :
   forall (x y:string) (L:Term),
   x<>y -> ([FId y := L]FVar x)=FVar x.
@@ -55,6 +68,9 @@ Proof.
   reflexivity.
 Qed.
 
+(** Substituting a term for a free variable, again, acts like the identity
+    operation when acting on a bound variable.
+*)
 Lemma subst_bvar_denied :
   forall (x:string) (n:nat) (L:Term),
   [FId x:=L]BVar n = BVar n.
@@ -64,14 +80,6 @@ Proof.
   apply neq_id. (* [BId n <> FId x] *)
   discriminate. (* by looking at it! *)
 Qed.
-Lemma unfold_one_step :
-  forall (x y:string) (L N:Term),
-  x<>y->~(Id_in_FV (FId x) L)->[FId x := [FId y := L]N]FVar x = [FId y:=L]N.
-Proof.
-  intros.
-  unfold subst.
-  apply eq_id.
-Qed.
 
 Lemma identity_subst :
   forall (y:string) (L:Term),
@@ -80,12 +88,28 @@ Proof.
   intuition.
   unfold subst; rewrite eq_id; reflexivity.
 Qed.
+
+Lemma unfold_one_step :
+  forall (x y:string) (L N:Term),
+  x<>y ->
+  ~(Id_in_FV (FId x) L) ->
+  [FId x := [FId y := L]N]FVar x = [FId y:=L]N.
+Proof.
+  intros.
+  unfold subst.
+  apply eq_id.
+Qed.
+
+(** Substituting [N] for a free variable in [Lam M] amounts to considering
+    the lambda abstraction of substituting [N] for that free variable in [M].
+*)
 Lemma subst_lambda_swap :
   forall (x:string) (M N:Term),
   [FId x:=N]Lam M=Lam([FId x:=N]M).
 Proof.
   intuition.
 Qed.
+
 Lemma subst_app_functoriality :
   forall (x:string) (M1 M2 N:Term),
   [FId x:=N]App M1 M2=App ([FId x:=N]M1) ([FId x:=N]M2).
@@ -93,6 +117,9 @@ Proof.
   intuition.
 Qed.
 
+(** If we try to substitute [N] for [s] in [M], but [s] isn't in [M], then
+    nothing happens. The substitution operation should return to us [M].
+*)
 Lemma absent_id_doesnt_subst :
   forall (s:string) (M N:Term),
   ~(Id_in_FV (FId s) M) -> [(FId s):=N]M = M.
@@ -147,7 +174,10 @@ Qed.
 
 Lemma substitution_lemma_subcase_13 :
   forall (x y s:string) (L M N:Term),
-  x<>y -> x<>s -> y<>s -> ~(Id_in_FV (FId x) L) ->
+  x<>y -> 
+  x<>s -> 
+  y<>s -> 
+  ~(Id_in_FV (FId x) L) ->
   [FId y := L]([FId x := N]FVar s) = [FId x := [FId y := L]N]([FId y := L]FVar s).
 Proof.
   intros.
@@ -155,7 +185,7 @@ Proof.
   reflexivity. auto. auto. auto. (* so we're done *)
 Qed.
 
-(* Barendregt 2.1.16 *)
+(** Barendregt 2.1.16 *)
 Theorem substitution_lemma : (* I didn't name it... *)
   forall (x y:string) (L M N:Term),
   x<>y -> ~(Id_in_FV (FId x) L) ->
@@ -188,6 +218,7 @@ Proof.
   - repeat (rewrite subst_app_functoriality).
     rewrite IHM1; rewrite IHM2; reflexivity. (* Then by inductive hypothesis, it's true. *)
 Qed.
+(** [] *)
 
 (** Barendregt 2.1.17.i *)
 Proposition subst_apply_rand :
@@ -215,3 +246,5 @@ Proof.
 Qed.
 
 End Substitute.
+End Untyped.
+End src.
