@@ -1,8 +1,66 @@
+(* If you run into problems, try adding the following line:
+
+Add LoadPath "~/src/tractatus/src/Untyped/".
+
+...modify it to where the folder is, accordingly. *)
+
 Require Import String.
 Require Import List.
+Require Export Arith.
 Require Import Coq.Arith.EqNat.
+Require Import Coq.Arith.Compare_dec.
 
-Module Export DeBruijn.
+(* Helper lemmas, which should be refactored into a different module. *)
+(* Principle of explosion: from a contradiction, we can prove anything. *)
+Theorem ex_falso_quodlibet : forall (P:Prop),
+  False -> P.
+Proof.
+  intros P contra.
+  inversion contra.
+Qed.
+
+Lemma list_membership :
+  forall (A:Type) (x:A) (l1 l2:list A),
+  (In x l1)\/(In x l2) <-> In x (l1 ++ l2).
+Proof. intuition. Qed.
+(* End of Helper Lemmas *)
+
+Module Export Identifier.
+
+Inductive Id : Type :=
+  | FId : string -> Id (* free variable *)
+  | BId : nat -> Id.   (* bounded variable *)
+Hint Constructors Id.
+
+Theorem eq_id_dec : forall id1 id2 : Id, {id1 = id2} + {id1 <> id2}.
+Proof.
+  decide equality.
+  apply string_dec.
+  apply eq_nat_dec.
+Qed.
+
+Lemma eq_id : forall (T:Type) x (p q:T),
+              (if eq_id_dec x x then p else q) = p.
+Proof.
+  intros.
+  destruct (eq_id_dec x x).
+  (* Case: [x=x] *)
+    try reflexivity.
+  (* Case: [x<>x] (impossible) *)
+    apply ex_falso_quodlibet; auto.
+Qed.
+
+Lemma neq_id : forall (T:Type) x y (p q:T), x <> y ->
+               (if eq_id_dec x y then p else q) = q.
+Proof.
+  intros.
+  destruct (eq_id_dec x y).
+  (* Case x = y (impossible) *)
+    subst. apply ex_falso_quodlibet; apply H; reflexivity.
+  (* Case x <> y *)
+    reflexivity.
+Qed.
+End Identifier.
 
 (**
   We use a modified de Bruijn indices, which for free variables
@@ -13,12 +71,14 @@ Module Export DeBruijn.
   match [lambda [x] z], which the usual de Bruijn indices would not
   handle.
 *)
+Module Export DeBruijn.
+
 Inductive Term : Type :=
   | FVar : string -> Term (* free variable *)
   | BVar : nat -> Term    (* bounded variable *)
   | Lam : Term -> Term
   | App : Term -> Term -> Term.
-
+Hint Constructors Term.
 End DeBruijn.
 
 (** The free variables in a term is just a list of all the free variables
@@ -32,12 +92,71 @@ Fixpoint FV (t : Term) : list Term :=
   | App t' t'' => app (FV t') (FV t'')
   end.
 
+Fixpoint Id_in_FV (x:Id) (t:Term) : Prop :=
+  match x with
+  | FId s => In (FVar s) (FV t)
+  | _ => False
+  end.
+
+Lemma FVar_eq :
+  forall (s s0:string),
+  (FVar s0) = (FVar s) <-> s=s0.
+Proof.
+  intuition.
+  (* -> s=s0 *)
+    inversion H; reflexivity.
+  (* <- (FVar s0) = (FVar s) *)
+    rewrite H; reflexivity.
+Qed.
+
+Lemma trivial_FV_in_FV :
+  forall (s s0:string),
+  Id_in_FV (FId s0) (FVar s) <-> s=s0.
+Proof.
+  intuition.
+  (* -> *)
+  inversion H. inversion H0; reflexivity. inversion H0.
+  (* <- *)
+  rewrite H; unfold Id_in_FV; unfold FV; compute; auto.
+Qed.
+
+Lemma trivial_FV_notin_FV :
+  forall (s s0:string),
+  s<>s0 <-> ~(Id_in_FV (FId s0) (FVar s)).
+Proof.
+  intuition.
+  (* -> *)
+  apply trivial_FV_in_FV in H0; contradiction.
+  (* <- *)
+  apply trivial_FV_in_FV in H0; contradiction.
+Qed.
+
+Corollary trivial_FV_notin_BV :
+  forall (s:string) (n:nat),
+  ~(Id_in_FV (FId s) (BVar n)).
+Proof. intuition. Qed.
+
+Proposition app_FV_functorial :
+  forall (M1 M2:Term),
+  FV (App M1 M2) = (FV M1) ++ (FV M2).
+Proof. intuition. Qed.
+
+Proposition app_FV_denied_l :
+  forall (s:string) (M1 M2:Term),
+   (Id_in_FV (FId s) M1)\/(Id_in_FV (FId s) M2) <->
+   Id_in_FV (FId s) (App M1 M2).
+Proof.
+  intros.
+  unfold Id_in_FV; rewrite app_FV_functorial; apply list_membership.
+Qed.
+
 Module PrettyTerm.
 
 Inductive pterm : Type :=
   | Var : string -> pterm
   | Lam : string -> pterm -> pterm
   | App : pterm -> pterm -> pterm.
+Hint Constructors pterm.
 
 End PrettyTerm.
 
@@ -54,14 +173,14 @@ Example pretty_term_1 :
         (PrettyTerm.App
           (PrettyTerm.Var "x")
           (PrettyTerm.Var "y")))).
-Proof. simpl. reflexivity. Qed.
+Proof. reflexivity. Qed.
 
 Example pretty_term_2 :
   (lambda ["f", "g"] `"f") =
   PrettyTerm.Lam "f"
     (PrettyTerm.Lam "g"
       (PrettyTerm.Var "f")).
-Proof. simpl. reflexivity. Qed.
+Proof. reflexivity. Qed.
 
 (** ** Syntactic Sugar: [PrettyTerm] to [Term]
 
@@ -121,7 +240,7 @@ Coercion dename : PrettyTerm.pterm >-> Term.
 Lemma free_variables_dont_match_lam :
   forall (x y z : string),
   y <> z ->
-  ((lambda [x] (PrettyTerm.Var y)) <> (lambda [x] (PrettyTerm.Var z))).
+  ((lambda [x] `"y") <> (lambda [x] `"z")).
 Proof.
   (* Introduce the variables, and the hypothesis
      [H : y <> z] *)
@@ -131,13 +250,8 @@ Proof.
      rewrites the hypothesis as [H : y = z -> False], and
      the goal is now [False] *)
   intuition.
-  (* [H : y = z -> False], the goal is now [y = z] *)
-  apply H.
-  (* From [H0], we have the bodies of the [lambda] expressions be equal,
-     i.e., [H2 : y = z] via [inversion] *)
+  (* But for [H0] to hold while assuming [y = z] gives us our result. *)
   inversion H0.
-  (* From [H : y = z -> False] and [H2 : y = z], we get our... *)
-  contradiction.
 Qed.
 
 (** It is a necessary condition for the free variables of
@@ -150,66 +264,74 @@ Theorem free_var_match_necessary_cond_term_eq :
 (* Proof by contrapositive, [H0 : t = t'] implies [FV t = FV t']. *)
 Proof.
   intuition.
-  apply H.
-  subst.
-  reflexivity.
+  apply H; subst; reflexivity.
 Qed.
 
 (** * Appendix: Helper Functions *)
 
 (** Definitions are taken from Barendregt's _Lambda Calculus_. *)
 
-(** The SKI combinators. Barendregt 2.1.25. *)
+(** The SKI combinators. Barendregt 2.1.25. We also have included the Omega combinator. *)
 
 Module Combinator.
+
+(** We have the classic [S], [K], and [I] combinators, which famously generate any
+    closed term.
+*)
 Definition I : Term := Lam (BVar 0).
+Hint Unfold I.
 Definition K : Term := Lam (Lam (BVar 1)).
+Hint Unfold K.
 Definition S : Term := Lam (Lam (Lam (App (App (BVar 2) (BVar 0)) (App (BVar 1) (BVar 0))))).
+Hint Unfold S.
+
+(** We also have a nonterminating [Omega] combinator, which --- if
+    evaluated --- produces itself.
+*)
+Definition omega : Term := App (App S I) I.
+Hint Unfold omega.
+Definition Omega : Term := App omega omega.
+Hint Unfold Omega.
+
 End Combinator.
 
 Example s_dename_ex1 :
   dename (lambda ["x", "y", "z"] `"x" @ `"z" @ (`"y" @ `"z")) = Combinator.S.
-Proof. simpl. reflexivity. Qed.
+Proof. simpl; reflexivity. Qed.
 
-Section ClosedTerms.
+(** **** Closed Terms
 
-(** A term is "closed" if it has no free variables. (Barendregt, 2.1.7.ii.) *)
-Fixpoint is_closed (t : Term) : Prop :=
-  match t with
-  | FVar s => False
-  | BVar _ => True
-  | Lam t' => is_closed t'
-  | App t' t'' => (is_closed t') /\ (is_closed t'')
-  end.
+  A term is "closed" if it has no free variables. (Barendregt, 2.1.7.ii.) 
+*)
+Inductive closed : Term -> Prop :=
+  | fvar_closed : forall (s:string), closed (FVar s)
+  | bvar_closed : forall (n:nat), closed (BVar n)
+  | lam_closed : forall (t:Term), closed t -> closed (Lam t)
+  | app_closed : forall (t t':Term), closed t -> closed t' -> closed (App t t').
+Hint Constructors closed.
+
+(** All combinators are closed terms. *)
 
 Example i_is_closed :
-  is_closed Combinator.I.
-Proof. reflexivity. Qed.
-
-(** The proof for [S] being closed is deceptive, because we have to
-    expand out the definition several times (due to the nested applications).
-    The [constructor] tactic expands out the [is_closed] to handle
-    such applications. So really, the proof is just manually unraveling
-    [S].
-
-    The trick, however, is to [simpl]-ify life. Then we our goal changes
-    and we just have to prove [(True /\ True) /\ True /\ True] is [True].
-    Which it is ([auto] says "No, really, it is.").
-*)
+  closed Combinator.I.
+Proof. unfold Combinator.I; auto. Qed.
 
 Example s_is_closed :
-  is_closed Combinator.S.
-Proof. simpl. auto. Qed.
+  closed Combinator.S.
+Proof.
+  repeat (apply lam_closed); auto.
+Qed.
 
 Example k_is_closed :
-  is_closed Combinator.K.
-Proof. reflexivity. Qed.
+  closed Combinator.K.
+Proof.
+  unfold Combinator.K; auto.
+Qed.
 
-End ClosedTerms.
+(** **** Subterms
 
-Section Subterms.
-
-(* The collection of subterms of a given term. (Barendregt, 2.1.8.) *)
+ The collection of subterms of a given term. (Barendregt, 2.1.8.)
+*)
 Fixpoint subterms (t : Term) : list Term :=
   match t with
   | FVar s => (FVar s)::nil
@@ -238,9 +360,7 @@ Example s_subterms :
                     :: App (BVar 1) (BVar 0) :: BVar 1 :: BVar 0 :: nil.
 Proof. reflexivity. Qed.
 
-End Subterms.
-
-(* Barendregt 2.1.9. Modified slightly to handle the [n=0] case. *)
+(** Barendregt 2.1.9. Modified slightly to handle the [n=0] case. *)
 Fixpoint iterate (n : nat) (t : Term) : Term :=
   match n with
   | 0 => Combinator.I
@@ -248,8 +368,8 @@ Fixpoint iterate (n : nat) (t : Term) : Term :=
   | S n' => App t (iterate n' t)
   end.
 
-Section TermLength.
-
+(** The length of a term is the (number of free variables) + (number of lambdas) 
+    + (number of de Bruijn indices). *)
 Fixpoint length (t : Term) : nat :=
   match t with
   | FVar _ => 1
@@ -269,5 +389,3 @@ Proof. reflexivity. Qed.
 Example s_length :
   length Combinator.S = 7.
 Proof. reflexivity. Qed.
-
-End TermLength.
