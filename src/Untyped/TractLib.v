@@ -23,6 +23,13 @@ Inductive multi (X:Type) (R: relation X)
                     multi X R x z.
 Implicit Arguments multi [[X]]. 
 
+
+Tactic Notation "print_goal" := match goal with |- ?x => idtac x end.
+Tactic Notation "normalize" := 
+   repeat (print_goal; eapply multi_step ; 
+             [ (eauto 10; fail) | (instantiate; simpl)]);
+   apply multi_refl.
+
 Ltac move_to_top x :=
   match reverse goal with
   | H : _ |- _ => try move x after H

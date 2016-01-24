@@ -148,12 +148,6 @@ Hint Constructors beta.
 Notation multibeta := (multi beta).
 Notation "t1 '==>_beta*' t2" := (multibeta t1 t2) (at level 40).
 
-Tactic Notation "print_goal" := match goal with |- ?x => idtac x end.
-Tactic Notation "normalize" := 
-   repeat (print_goal; eapply multi_step ; 
-             [ (eauto 10; fail) | (instantiate; simpl)]);
-   apply multi_refl.
-
 (**
 We can see that [Combinator.I] acts like the identity function
 when we apply any term to it. That is, [App Combinator.I t]
