@@ -1,3 +1,9 @@
+(** printing _beta #<span style="font-family: arial;"><sub>&beta;</sub></span># *)
+(** printing beta #<span style="font-family: arial;">&beta;</span># *)
+(** printing ==>beta #<span style="font-family: arial;">&rArr;<sub>&beta;</sub></span># *)
+(** printing ==>beta* #<span style="font-family: arial;">&rArr;<sub>&beta;</sub>*</span># *)
+(** printing ==> #<span style="font-family: arial;">&rArr;</span># *)
+
 (** * Beta Reduction and Reduction Schemes
 
 This is the bread-and-butter of lambda calculus. We apply
@@ -71,17 +77,172 @@ Fixpoint Beta (t:Term) : Term :=
   end.
 
 (**
-We see that, for any term [t], we have 
-[Combinator.I t -> t]. This merits thinking of [Combinator.I]
-as the "identity function".
+We can see, for example, that [Combinator.I t = t] for any term [t].
+And now, we can prove it!
 *)
-Example i_combinator_is_identity :
-  forall (t : Term),
-  Beta (App Combinator.I t) = t.
+Example expand_i :
+  forall (t:Term),
+  (Beta (App Combinator.I t)) = t.
 Proof.
-  (* unfold the definitions, then apply Id equality *)
+  intros.
+  unfold Combinator.I.
+  unfold Beta.
+  unfold subst.
+  rewrite eq_id.
+  reflexivity.
+Qed.
+
+(**
+Alternatively, a more realistic treatment of beta reduction is to treat
+it as a relation [t ==>_beta t']. We can axiomatize its behaviour by the
+following rule of inference:
+
+[[
+   ----------------------------------------- Beta
+   (App (Lam t) t') ==>_beta [(BVar 0):=t']t
+]]
+
+We can transform an application to a function by substituting in the
+expression [t'] for the argument [BVar 0]. There are a few other rules
+of inference which respects the structure of applications and lambda
+abstractions:
+
+[[
+          t1 ==>_beta t2
+    -------------------------- (B_Lam)
+    (Lam t1) ==>_beta (Lam t2)
+
+          t1 ==>_beta t2
+  ------------------------------ (B_App_right)
+  (App t1 x) ==>_beta (App t2 x)
+
+          t1 ==>_beta t2
+  ------------------------------ (B_App_left)
+  (App x t1) ==>_beta (App x t2)
+]]
+
+Technically, this is all we need. But we work with, in practice,
+the transitive, reflexive closure of beta reduction. That is to
+say, we would like [t ==>_beta t] for all terms [t], and we'd like
+if [t1 ==>_beta t2] and [t2 ==>_beta t3] to imply [t1 ==>_beta t3].
+*)
+
+Reserved Notation "t1 '==>_beta' t2" (at level 40).
+Inductive beta : Term -> Term -> Prop :=
+  | B_AppAbs : forall t1 t2,
+               App (Lam t2) t1 ==>_beta [BId 0:=t1]t2
+  | B_Lam : forall t1 t2,
+            t1 ==>_beta t2 ->
+            (Lam t1) ==>_beta (Lam t2)
+  | B_App_l : forall t1 t2 t3,
+              t1 ==>_beta t2 ->
+              (App t3 t1) ==>_beta (App t3 t2)
+  | B_App_r : forall t1 t2 t3,
+              t1 ==>_beta t2 ->
+              (App t1 t3) ==>_beta (App t2 t3)
+where "t1 '==>_beta' t2" := (beta t1 t2).
+Hint Constructors beta.
+
+Notation multibeta := (multi beta).
+Notation "t1 '==>_beta*' t2" := (multibeta t1 t2) (at level 40).
+
+Tactic Notation "print_goal" := match goal with |- ?x => idtac x end.
+Tactic Notation "normalize" := 
+   repeat (print_goal; eapply multi_step ; 
+             [ (eauto 10; fail) | (instantiate; simpl)]);
+   apply multi_refl.
+
+(**
+We can see that [Combinator.I] acts like the identity function
+when we apply any term to it. That is, [App Combinator.I t]
+produces [t]. This can be made precise thanks to the beta reduction
+procedure.
+*)
+Example i_is_id :
+  forall (t:Term),
+  (App Combinator.I t) ==>_beta t.
+Proof.
+  intro t.
+  unfold Combinator.I.
+  (* Rewrite the RHS of [App I t ==>_beta t] using [expand_i] *)
+  rewrite <- expand_i.
+  (* ... which gives us the beta reduction rule *)
+  apply B_AppAbs.
+Qed.
+
+(**
+If a term [t] beta reduces to [t'] in a single step, then
+[t] reduces to [t'] in the multiple step version too.
+(If not, there's serious problems, either in how we coded
+beta reduction up, or in the logical underpinnings of our
+endeavour.)
+*)
+Theorem multi_beta_imp : 
+  forall (x y : Term),
+  x ==>_beta y -> x ==>_beta* y.
+Proof.
+  intros x y r.
+  apply multi_step with y.
+  apply r. (* To prove [x ==>_beta y], use [r : x ==>beta y] as evidence *)
+  apply multi_refl. (* ...and [y ==>_beta* y] by reflexivity.*)
+Qed.
+
+(**
+A helper lemma we will use in a moment. Basically, we want
+to show [x:=I]I=I for any variable [x].
+*)
+Lemma i_subst :
+  forall (x:Id),
+  subst x Combinator.I Combinator.I = Combinator.I.
+Proof.
   intuition.
-  unfold Beta; unfold Combinator.I; unfold subst; apply eq_id.
+  unfold Combinator.I; unfold subst. (* Unfold the definitions *)
+  induction x. (* Exhaust the cases *)
+  Case "x = FId s". 
+    rewrite neq_id. reflexivity. discriminate.
+  Case "x = BId (S n)".
+    rewrite neq_id. reflexivity. discriminate.
+Qed.
+
+(**
+Now, we claim that [SII] _is_ the self-application combinator.
+(Not the paradoxical, "It will blowup your computer" combinator,
+but the ancillary combinator used in its definition.)
+We can show that [SII] beta reduces to the self-application
+combinator.
+*)
+Example sii_is_omega :
+  (App (App Combinator.S Combinator.I) Combinator.I) ==>_beta*
+  Combinator.omega.
+Proof.
+  unfold Combinator.S; unfold Combinator.omega. (* Unfold the definitions *)
+  (* First consider [App Combinator.S Combinator.I evaluates to...] *)
+  eapply multi_step. eapply B_App_r.
+  (* Perform the outermost beta reduction *)
+  eapply B_AppAbs. eapply multi_step.
+  unfold subst; rewrite eq_id; repeat (rewrite neq_id).
+  (* Perform the second beta reduction, i.e., [App (what we did) Combinator.I] *)
+  eapply B_AppAbs.
+  discriminate. discriminate.
+  (* Perform the inner substitution
+     [[BId 0 := Combinator.I]Lam (App (App Combinator.I (BVar 0)) (App (BVar 1) (BVar 0)))
+     ==>_beta*
+     Lam (App (BVar 0) (BVar 0))]
+  *)
+  unfold subst; rewrite eq_id; repeat (rewrite neq_id).
+  rewrite i_subst.
+  (* WTS: [Lam (App (App Combinator.I (BVar 0)) (App Combinator.I (BVar 0))) 
+           ==>_beta*
+           Lam (App (BVar 0) (BVar 0))] *)
+  (* simplify one application of Combinator.I *)
+  eapply multi_step.
+  apply B_Lam; apply B_App_l; apply i_is_id.
+  (* simplify the other application of Combinator.I *)
+  eapply multi_step.
+  apply B_Lam; apply B_App_r; apply i_is_id. 
+  apply multi_refl.
+  (* ...and [BId 0 <> BId 1] *)
+  discriminate. 
 Qed.
 
 (**
