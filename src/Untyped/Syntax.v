@@ -481,6 +481,12 @@ Definition Omega : Term := App omega omega.
 
 End Combinator.
 
+Lemma omega_is_abs :
+  is_abs Combinator.omega.
+Proof.
+reflexivity.
+Qed.
+
 Example s_dename_ex1 :
   dename (lambda ["x", "y", "z"] `"x" @ `"z" @ (`"y" @ `"z")) = Combinator.S.
 Proof. simpl; reflexivity. Qed.

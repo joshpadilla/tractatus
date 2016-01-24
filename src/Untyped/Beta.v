@@ -95,6 +95,18 @@ Proof.
 Qed.
 
 (**
+Even unfolding the definition of [Combinator.Omega] once with
+beta reduction produces [Combinator.Omega]!
+*)
+Example Omega_combinator_evaluates_to_itself :
+  Beta Combinator.Omega = Combinator.Omega.
+Proof.
+  unfold Combinator.Omega; unfold Combinator.omega.
+  unfold Beta. unfold subst. rewrite eq_id.
+  reflexivity.
+Qed.
+
+(**
 Alternatively, a more realistic treatment of beta reduction is to treat
 it as a relation [t ==>_beta t']. We can axiomatize its behaviour by the
 following rule of inference:
@@ -145,6 +157,21 @@ Inductive beta : Term -> Term -> Prop :=
 where "t1 '==>_beta' t2" := (beta t1 t2).
 Hint Constructors beta.
 
+(**
+If we have [t1 ==>_beta t2] and [t2 ==>_beta t3], 
+then...what is the relation between [t1] and [t3]? 
+We need the transitive closure of [==>_beta] to say that
+[t1] will reduce to [t3] in multiple steps.
+
+Further, what about [t1 ==>_beta t1]? 
+Isn't this "obviously true"? We'd like it
+to be, but no, it technically is _not_ true: 
+there is no rule allowing us to do
+this. Not that [t1 ==>_beta t1] _contradicts_ 
+any property, it's just not explicitly
+allowed. So we'd like to take the _reflexive_ 
+closure of beta reduction, too.
+*)
 Notation multibeta := (multi beta).
 Notation "t1 '==>_beta*' t2" := (multibeta t1 t2) (at level 40).
 
@@ -179,7 +206,7 @@ Theorem multi_beta_imp :
 Proof.
   intros x y r.
   apply multi_step with y.
-  apply r. (* To prove [x ==>_beta y], use [r : x ==>beta y] as evidence *)
+  apply r. (* To prove [x ==>_beta y], use [r : x ==>_beta y] as evidence *)
   apply multi_refl. (* ...and [y ==>_beta* y] by reflexivity.*)
 Qed.
 
@@ -208,8 +235,7 @@ We can show that [SII] beta reduces to the self-application
 combinator.
 *)
 Example sii_is_omega :
-  (App (App Combinator.S Combinator.I) Combinator.I) ==>_beta*
-  Combinator.omega.
+  (App (App Combinator.S Combinator.I) Combinator.I) ==>_beta* Combinator.omega.
 Proof.
   unfold Combinator.S; unfold Combinator.omega. (* Unfold the definitions *)
   (* First consider [App Combinator.S Combinator.I evaluates to...] *)
@@ -246,14 +272,22 @@ Definition (Barendregt 2.1.34).
 A term is in Beta Normal Form iff it doesn't have any
 subterms of the form [App (lambda x. body) R].
 *)
-Fixpoint BetaNF (M:Term) : Prop :=
-  match M with
-  | BVar _ => True
-  | FVar _ => True
-  | Lam body => BetaNF body
-  | App (Lam _) _ => False
-  | App M' N => (BetaNF M')/\(BetaNF N)
-  end.
+Inductive BetaNF : Term -> Prop :=
+  | fvar_bnf : forall s,
+               BetaNF (FVar s)
+  | bvar_bnf : forall n, BetaNF (BVar n)
+  | lam_bnf : forall t,
+              BetaNF t -> BetaNF (Lam t)
+  | app_bnf : forall t1 t2,
+              ~(is_abs t1) -> (BetaNF t1) -> (BetaNF t2) -> BetaNF (App t1 t2).
+Hint Constructors BetaNF.
+
+Example omega_combinator_is_beta_nf :
+  BetaNF Combinator.omega.
+Proof.
+  unfold Combinator.omega.
+  auto.
+Qed.
 
 (**
 What expression wouldn't be in Beta normal form? One that
@@ -265,84 +299,13 @@ loop. Which may be bad.
 Example Omega_combinator_isnt_beta_nf :
   ~(BetaNF Combinator.Omega).
 Proof.
-  intros.
-
-  unfold Combinator.Omega; (* Unfold the definitions *)
-  unfold Combinator.omega;
-  unfold BetaNF.
-
-  simpl; tauto. (* And it's obvious. *)
+  unfold Combinator.Omega. (* Unfold the definitions *)
+  intuition.
+  inversion H.
+  (* But for this to be true, we need
+     [H2 : ~ is_abs Combinator.Omega] *)
+  contradict H2. (* Which we know is false... *)
+  apply omega_is_abs. (* ...because we proved [is_abs Combinator.Omega]! *)
 Qed.
 
-(**
-Even unfolding the definition of [Combinator.Omega] once with
-beta reduction produces [Combinator.Omega]!
-*)
-Example Omega_combinator_evaluates_to_itself :
-  Beta Combinator.Omega = Combinator.Omega.
-Proof.
-  unfold Combinator.Omega; unfold Combinator.omega.
-  unfold Beta. unfold subst. rewrite eq_id.
-  reflexivity.
-Qed.
-
-
-(** * Values
-
-
-We would like to think of Beta reduction as one step in an abstract
-"processor". A value would be where the Beta reduction would stop after
-finitely many steps. So we'll just take [BetaNF] as the criteria for
-determining if a [Term] is a value or not.
-*)
-Definition value (t:Term) : Prop := BetaNF t.
-Hint Unfold value.
-
-(** * Small-Step Operational Semantics
-
-We can explicitly state the rules for our "abstract processor".
-
-*)
-
-(** 
-[[
-                               value v
-                      --------------------------                    (ST_AppAbs)
-                        (λx.t) v ==> [x:=v]t
-
-                              t1 ==> t1'
-                           ----------------                           (ST_App1)
-                           t1 t2 ==> t1' t2
-
-                              value v
-                              t2 ==> t2'
-                            --------------                           (ST_App2)
-                            v t2 ==> v t2'
-]]
-*)
-Reserved Notation "t1 '==>' t2" (at level 40).
-
-Inductive step : Term -> Term -> Prop :=
-  | ST_AppAbs : forall t v,
-         value v ->
-         (App (Lam t) v) ==> [BId 0:=v]t (* Beta reduction, more or less *)
-  | ST_App1 : forall t1 t1' t2,
-         t1 ==> t1' ->
-         App t1 t2 ==> App t1' t2
-  | ST_App2 : forall v1 t2 t2',
-         value v1 ->
-         t2 ==> t2' ->
-         App v1 t2 ==> App v1 t2'
-where "t1 '==>' t2" := (step t1 t2).
-Hint Constructors step.
-
-
-Notation multistep := (multi step).
-Notation "t1 '==>*' t2" := (multistep t1 t2) (at level 40).
-
-Example Omega_steps_to_itself:
-  Combinator.Omega ==>* Combinator.Omega.
-Proof.
-  apply multi_refl.
-Qed.
 End Beta.
