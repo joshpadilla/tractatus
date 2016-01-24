@@ -1,3 +1,5 @@
+(** remove printing * *)
+(** printing _beta* #<span style="font-family: arial;"><sub>&beta;</sub>*</span># *)
 (** printing _beta #<span style="font-family: arial;"><sub>&beta;</sub></span># *)
 (** printing beta #<span style="font-family: arial;">&beta;</span># *)
 (** printing ==>beta #<span style="font-family: arial;">&rArr;<sub>&beta;</sub></span># *)
