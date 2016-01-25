@@ -92,8 +92,4 @@ Proof.
   inversion contra.
 Qed.
 
-Lemma list_membership :
-  forall (A:Type) (x:A) (l1 l2:list A),
-  (In x l1)\/(In x l2) <-> In x (l1 ++ l2).
-Proof. intuition. Qed.
 End TractLib.

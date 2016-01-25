@@ -292,13 +292,14 @@ Corollary trivial_FV_notin_BV :
   ~(Id_in_FV (FId s) (BVar n)).
 Proof. intuition. Qed.
 
-Proposition app_FV_denied_l :
+Proposition FV_app_iff :
   forall (s:string) (M1 M2:Term),
    (Id_in_FV (FId s) M1)\/(Id_in_FV (FId s) M2) <->
    Id_in_FV (FId s) (App M1 M2).
 Proof.
   intros.
-  unfold Id_in_FV; rewrite app_FV_functorial; apply list_membership.
+  unfold Id_in_FV; rewrite app_FV_functorial; rewrite in_app_iff; reflexivity.
+Qed.
 Qed.
 
 (** * A Prettier Syntax

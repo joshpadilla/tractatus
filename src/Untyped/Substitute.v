@@ -166,7 +166,8 @@ Proof.
     rewrite subst_lambda_swap. rewrite IHM. reflexivity. auto.
   (* Case: M = App M1 M2 *)
     rewrite subst_app_functoriality. rewrite IHM1. rewrite IHM2. reflexivity.
-    rewrite <- app_FV_denied_l in H; auto. rewrite <- app_FV_denied_l in H; auto.
+    rewrite <- FV_app_iff in H; auto.
+    rewrite <- FV_app_iff in H; auto.
 Qed.
 
 (** ** Non-Commutativity of Substitution
