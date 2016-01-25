@@ -380,34 +380,34 @@ Lemma fits_cons :
   fits t (x::l) <-> (fits t (x::nil))/\(fits t l).
 Proof.
   intuition.
-  (* [fits t (x::l) -> fits t (x::nil)] *)
+  (* fits t (x::l) -> fits t (x::nil) *)
   unfold fits. intuition.
-    (* [Forall is_free (x :: nil)] *)
+    (* Forall is_free (x :: nil) *)
     apply Forall_cons.
     inversion H. inversion H0. apply H4.
     apply Forall_nil.
-    (* [Forall (fun x0 => ~(Id_in_FV x0 t)) (x::nil)] *)
+    (* Forall (fun x0 => ~(Id_in_FV x0 t)) (x::nil) *)
     apply Forall_cons. inversion H. inversion H1. apply H4.
     apply Forall_nil.
-  (* [fits t (x::l) -> fits t l] *)
+  (* fits t (x::l) -> fits t l *)
   unfold fits. intuition.
-    (* [Forall is_free l] *)
+    (* Forall is_free l *)
     inversion H. inversion H0. apply H5.
-    (* [Forall (fun x0 => ~(Id_in_FV x0 t)) l] *)
+    (* Forall (fun x0 => ~(Id_in_FV x0 t)) l *)
     inversion H. inversion H1. apply H5.
-  (* [(fits t (x::nil))/\(fits t l) -> fits t (x::l)] *)
+  (* (fits t (x::nil))/\(fits t l) -> fits t (x::l) *)
   unfold fits. intuition.
-    (* [Forall is_free (x::l)] *)
+    (* Forall is_free (x::l) *)
     apply Forall_cons.
-      (* [Forall is_free (x::nil)] *)
+      (* Forall is_free (x::nil) *)
       inversion H0. inversion H. apply H5.
-      (* [Forall is_free l] *)
+      (* Forall is_free l *)
       inversion H1. apply H.
-    (* [Forall (fun x0 => ~(Id_in_FV x0 t)) (x::l)] *)
+    (* Forall (fun x0 => ~(Id_in_FV x0 t)) (x::l) *)
     apply Forall_cons.
-      (* [Forall (fun x0 => ~(Id_in_FV x0 t)) (x::nil)] *)
+      (* Forall (fun x0 => ~(Id_in_FV x0 t)) (x::nil) *)
       inversion H0. inversion H2. apply H5.
-      (* [Forall (fun x0 => ~(Id_in_FV x0 t)) l] *)
+      (* Forall (fun x0 => ~(Id_in_FV x0 t)) l *)
       inversion H1. apply H2.
 Qed.
 
@@ -424,10 +424,14 @@ Proof.
   Case "nil".
     unfold app. apply H0.
   Case "a::l1".
-    rewrite <- app_comm_cons. (* WTS [fits t (a::(l1 ++ l2)%list)] *)
-    apply fits_cons.
+    rewrite <- app_comm_cons. (* Goal: fits t (a::(l1 ++ l2)) *)
+    apply fits_cons. (* Now: fits t (a :: nil) /\ fits t (l1 ++ l2) *)
     rewrite fits_cons in H.
-    intuition.
+    (* We have a modus ponens situation, thanks to induction:
+       H : fits t (a :: nil) /\ fits t l1
+       IHl1 : fits t l1 -> fits t (l1 ++ l2)
+       Goal : fits t (a :: nil) /\ fits t (l1 ++ l2) *)
+    tauto.
 Qed.
 
 (** * A Prettier Syntax
