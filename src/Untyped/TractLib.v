@@ -92,4 +92,17 @@ Proof.
   inversion contra.
 Qed.
 
+Lemma Forall_concat :
+  forall (A:Type) (l1 l2:list A) (p:A->Prop),
+  (Forall p l1) -> (Forall p l2) -> (Forall p (app l1 l2)).
+Proof.
+  intros.
+  induction l1.
+  Case "nil".
+    unfold app. apply H0.
+  Case "a::l1".
+    apply Forall_cons. inversion H. apply H3.
+    apply IHl1.
+    inversion H. apply H4.
+Qed.
 End TractLib.

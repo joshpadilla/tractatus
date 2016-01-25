@@ -37,6 +37,18 @@ Inductive Id : Type :=
   | BId : nat -> Id.   (* bounded variable *)
 Hint Constructors Id.
 
+Definition is_free (x:Id) : Prop :=
+  match x with
+  | FId _ => True
+  | _ => False
+  end.
+
+Definition is_bound (x:Id) : Prop :=
+  match x with
+  | BId _ => True
+  | _ => False
+  end.
+
 (**
 We need decidable equality on identifiers, to prove whether two [Id]s are
 equal or not. These propositions establish the basic properties needed later
@@ -220,6 +232,25 @@ Fixpoint FV (t : Term) : list Term :=
 *** Exercise
 Show that [forall (v t:Term), In v (FV t) -> is_free_var v].
 *)
+Lemma every_elt_of_FV_is_free :
+  forall (t:Term),
+  Forall is_free_var (FV t).
+Proof.
+(* begin hide *)
+  intuition.
+  induction t.
+  Case "FVar s".
+    unfold FV; unfold is_free_var. apply Forall_cons. auto.
+    apply Forall_nil.
+  Case "BVar n".
+    unfold FV; unfold is_free_var.
+    apply Forall_nil. 
+  Case "Lam t". apply IHt.
+  Case "App t1 t2". replace (FV (App t1 t2)) with (app (FV t1) (FV t2)).
+    apply Forall_concat. apply IHt1. apply IHt2.
+    intuition. (* to prove [(FV t1 ++ FV t2)%list = FV (App t1 t2)] *)
+(* end hide *)
+Qed.
 
 (**
 *** Helper Functions
@@ -300,6 +331,103 @@ Proof.
   intros.
   unfold Id_in_FV; rewrite app_FV_functorial; rewrite in_app_iff; reflexivity.
 Qed.
+
+(** **** "Fitting"
+
+A term [t] "fits" a list of free ids [l] if and only if
+the set of free variables [FV t] is disjoint from [l].
+*)
+Definition fits (t:Term) (l:list Id) : Prop :=
+  (Forall is_free l) /\ (Forall (fun x => ~(Id_in_FV x t)) l).
+
+(**
+A trivial example of fitting.
+*)
+Example fits_ex1 :
+  fits (Lam (FVar "Foo")) ((FId "bar")::nil).
+Proof.
+  unfold fits.
+  intuition.
+  (* 1. The list of ids really are all free *)
+  apply Forall_cons.
+  unfold is_free. auto.
+  apply Forall_nil.
+  (* 2. There is no overlap *)
+  (* Case "Bar" is free *)
+  apply Forall_cons.
+  unfold Id_in_FV. unfold FV. unfold In.
+  intuition.
+  discriminate.
+  (* Case [nil] is free *)
+  apply Forall_nil.
+Qed.
+
+(**
+Every term [t] fits [nil], trivially.
+*)
+Lemma everything_fits_nil :
+  forall (t:Term), fits t nil.
+Proof.
+  intros t. unfold fits. auto.
+Qed.
+
+(**
+Now, we want to show that [fits t] handles a list of ids [a::l]
+if and only if [fits t a] and [fits t l].
+*)
+Lemma fits_cons :
+  forall (t:Term) (x:Id) (l:list Id),
+  fits t (x::l) <-> (fits t (x::nil))/\(fits t l).
+Proof.
+  intuition.
+  (* [fits t (x::l) -> fits t (x::nil)] *)
+  unfold fits. intuition.
+    (* [Forall is_free (x :: nil)] *)
+    apply Forall_cons.
+    inversion H. inversion H0. apply H4.
+    apply Forall_nil.
+    (* [Forall (fun x0 => ~(Id_in_FV x0 t)) (x::nil)] *)
+    apply Forall_cons. inversion H. inversion H1. apply H4.
+    apply Forall_nil.
+  (* [fits t (x::l) -> fits t l] *)
+  unfold fits. intuition.
+    (* [Forall is_free l] *)
+    inversion H. inversion H0. apply H5.
+    (* [Forall (fun x0 => ~(Id_in_FV x0 t)) l] *)
+    inversion H. inversion H1. apply H5.
+  (* [(fits t (x::nil))/\(fits t l) -> fits t (x::l)] *)
+  unfold fits. intuition.
+    (* [Forall is_free (x::l)] *)
+    apply Forall_cons.
+      (* [Forall is_free (x::nil)] *)
+      inversion H0. inversion H. apply H5.
+      (* [Forall is_free l] *)
+      inversion H1. apply H.
+    (* [Forall (fun x0 => ~(Id_in_FV x0 t)) (x::l)] *)
+    apply Forall_cons.
+      (* [Forall (fun x0 => ~(Id_in_FV x0 t)) (x::nil)] *)
+      inversion H0. inversion H2. apply H5.
+      (* [Forall (fun x0 => ~(Id_in_FV x0 t)) l] *)
+      inversion H1. apply H2.
+Qed.
+
+(**
+We want to show if we have a list [l1++l2] of ids, then
+[fits t l1] and [fits t l2] together implies [fits t (l1++l2)].
+*)
+Lemma fits_app :
+  forall (t:Term) (l1 l2:list Id),
+  fits t l1 -> fits t l2 -> fits t (app l1 l2).
+Proof.
+  intuition.
+  induction l1.
+  Case "nil".
+    unfold app. apply H0.
+  Case "a::l1".
+    rewrite <- app_comm_cons. (* WTS [fits t (a::(l1 ++ l2)%list)] *)
+    apply fits_cons.
+    rewrite fits_cons in H.
+    intuition.
 Qed.
 
 (** * A Prettier Syntax
